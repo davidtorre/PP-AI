@@ -12,7 +12,7 @@ build: ## Construir las imágenes desde el código fuente
 up: ## Levantar todos los servicios (build si no existen las imágenes)
 	docker compose up -d --build
 	@echo ""
-	@echo "  ✅ App disponible en → http://localhost:8081"
+	@echo "  ✅ App disponible en → http://localhost"
 	@echo "  🔌 API directa       → http://localhost:3003/api/health"
 	@echo "  🐘 Postgres          → localhost:5435 (user: ppai)"
 	@echo ""

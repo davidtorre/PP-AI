@@ -12,7 +12,7 @@ make up
 make seed
 
 # 3. Abrir en el navegador
-open http://localhost:8081
+open http://localhost
 ```
 
 | Cuenta | Contraseña | Rol |
@@ -36,7 +36,7 @@ make shell-db      # psql dentro de la base de datos
 
 | Servicio | URL |
 |---|---|
-| Aplicación (frontend) | http://localhost:8081 |
+| Aplicación (frontend) | http://localhost:80 |
 | API backend (directo) | http://localhost:3003 |
 | PostgreSQL | localhost:5435 (user: `ppai`, pass: `ppai_local_2024`) |
 

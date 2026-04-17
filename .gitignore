@@ -1,0 +1,23 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+*.tsbuildinfo
+
+# Runtime data
+backend/data/
+backend/uploads/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

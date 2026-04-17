@@ -50,6 +50,13 @@ services:
       GOOGLE_CLIENT_ID:     ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_CALLBACK_URL:  ${GOOGLE_CALLBACK_URL:-}
+      # Keycloak SSO (optional — leave blank to disable)
+      KEYCLOAK_URL:          ${KEYCLOAK_URL:-}
+      KEYCLOAK_PUBLIC_URL:   ${KEYCLOAK_PUBLIC_URL:-}
+      KEYCLOAK_REALM:        ${KEYCLOAK_REALM:-}
+      KEYCLOAK_CLIENT_ID:    ${KEYCLOAK_CLIENT_ID:-}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
+      KEYCLOAK_CALLBACK_URL: ${KEYCLOAK_CALLBACK_URL:-}
       FRONTEND_URL:         ${FRONTEND_URL}
     volumes:
       - uploads:/app/uploads
@@ -82,10 +89,73 @@ services:
     networks:
       - internal
 
+  # ── Keycloak SSO ──────────────────────────────────────────────────────────
+  # Opt-in: docker compose --profile keycloak up -d --build
+  # See: make keycloak-up  |  make keycloak-setup
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: >
+      start
+      --http-enabled=true
+      --hostname-strict=false
+    restart: unless-stopped
+    environment:
+      # Keycloak DB (keycloak-db service below)
+      KC_DB:               postgres
+      KC_DB_URL:           jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME:      ${KC_DB_USER:-keycloak}
+      KC_DB_PASSWORD:      ${KC_DB_PASSWORD}
+      # Public hostname — must match what the browser sees
+      KC_HOSTNAME_URL:     ${KEYCLOAK_PUBLIC_URL:-http://localhost:8180}
+      # Run behind nginx/ingress proxy
+      KC_PROXY:            edge
+      # Admin credentials
+      KEYCLOAK_ADMIN:          ${KC_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+    expose:
+      - "8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.0\r\n\r\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - internal
+    profiles:
+      - keycloak
+
+  # Dedicated postgres for Keycloak (keeps it isolated from app DB)
+  keycloak-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       keycloak
+      POSTGRES_USER:     ${KC_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+    volumes:
+      - kcdata:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KC_DB_USER:-keycloak} -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal
+    profiles:
+      - keycloak
+
 # ── Volumes ───────────────────────────────────────────────────────────────
 volumes:
   pgdata:
   uploads:
+  kcdata:
 
 # ── Networks ──────────────────────────────────────────────────────────────
 # Single internal network — no service is reachable from outside except

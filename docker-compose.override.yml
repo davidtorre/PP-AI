@@ -21,3 +21,15 @@ services:
       - "3003:3001"
     # Reinicio más rápido en local
     restart: "no"
+
+  # ── Keycloak (override local) ────────────────────────────────────────────
+  # En local usa start-dev (H2 embebido, sin necesidad de keycloak-db)
+  # Acceso admin: http://localhost:8180
+  keycloak:
+    command: start-dev
+    ports:
+      - "8180:8080"
+
+  keycloak-db:
+    ports:
+      - "5436:5432"

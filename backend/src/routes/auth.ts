@@ -15,6 +15,20 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const GOOGLE_CALLBACK_URL  = process.env.GOOGLE_CALLBACK_URL  || '';
 const FRONTEND_URL         = process.env.FRONTEND_URL         || '';
 
+// Keycloak OIDC — all optional; KC login is disabled if KEYCLOAK_URL is absent
+// KEYCLOAK_URL        = Docker-internal URL used by backend for token/userinfo calls
+// KEYCLOAK_PUBLIC_URL = Browser-facing URL used for the authorization redirect
+const KC_URL        = process.env.KEYCLOAK_URL        || '';
+const KC_PUBLIC_URL = process.env.KEYCLOAK_PUBLIC_URL || KC_URL;
+const KC_REALM      = process.env.KEYCLOAK_REALM      || '';
+const KC_CLIENT_ID  = process.env.KEYCLOAK_CLIENT_ID  || '';
+const KC_SECRET     = process.env.KEYCLOAK_CLIENT_SECRET || '';
+const KC_CALLBACK   = process.env.KEYCLOAK_CALLBACK_URL  || '';
+
+// Returns the base OIDC path for a given root (internal or public)
+const kcOidc = (base: string) => `${base}/realms/${KC_REALM}/protocol/openid-connect`;
+const kcConfigured = () => !!(KC_URL && KC_REALM && KC_CLIENT_ID);
+
 // ── Email/password login ───────────────────────────────────────────────────
 router.post('/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -181,6 +195,94 @@ router.get('/google/callback', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[Google OAuth] error:', err);
     res.redirect(`${FRONTEND_URL}/login?error=google_failed`);
+  }
+});
+
+// ── Keycloak OIDC ──────────────────────────────────────────────────────────
+
+// Step 1: redirect browser to Keycloak login page
+router.get('/keycloak', (req: Request, res: Response) => {
+  if (!kcConfigured()) {
+    // Not configured — send browser back to login with an error param
+    res.redirect(`${FRONTEND_URL}/login?error=keycloak_not_configured`);
+    return;
+  }
+
+  const params = new URLSearchParams({
+    client_id:     KC_CLIENT_ID,
+    redirect_uri:  KC_CALLBACK,
+    response_type: 'code',
+    scope:         'openid email profile',
+  });
+
+  res.redirect(`${kcOidc(KC_PUBLIC_URL)}/auth?${params}`);
+});
+
+// Step 2: Keycloak redirects here with ?code=...
+router.get('/keycloak/callback', async (req: Request, res: Response) => {
+  const { code, error } = req.query;
+
+  if (error || !code) {
+    res.redirect(`${FRONTEND_URL}/login?error=keycloak_cancelled`);
+    return;
+  }
+
+  try {
+    // Exchange authorization code for tokens (use internal URL)
+    const tokenRes = await fetch(`${kcOidc(KC_URL)}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code:          code as string,
+        client_id:     KC_CLIENT_ID,
+        client_secret: KC_SECRET,
+        redirect_uri:  KC_CALLBACK,
+        grant_type:    'authorization_code',
+      }),
+    });
+
+    const tokenData = await tokenRes.json() as Record<string, any>;
+
+    if (!tokenData.access_token) {
+      throw new Error(`No access_token from Keycloak: ${JSON.stringify(tokenData)}`);
+    }
+
+    // Fetch user info from Keycloak (use internal URL)
+    const userInfoRes = await fetch(`${kcOidc(KC_URL)}/userinfo`, {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+
+    const kcUser = await userInfoRes.json() as Record<string, any>;
+    const { email, name, preferred_username } = kcUser;
+
+    if (!email) {
+      throw new Error('Keycloak userinfo no devolvió email');
+    }
+
+    // Find or create local user (same pattern as Google OAuth)
+    let user = await getOne('SELECT * FROM usuarios WHERE email = $1', [email]);
+
+    if (!user) {
+      // First Keycloak login — create account with viewer role
+      user = await getOne(
+        `INSERT INTO usuarios (nombre, email, password_hash, rol)
+         VALUES ($1, $2, NULL, 'viewer')
+         RETURNING id, nombre, email, rol`,
+        [name || preferred_username || email, email]
+      );
+    }
+
+    const appToken = jwt.sign(
+      { id: user.id, email: user.email, rol: user.rol, nombre: user.nombre },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // Reuse the same frontend callback page used by Google OAuth
+    res.redirect(`${FRONTEND_URL}/auth/callback?token=${appToken}`);
+  } catch (err) {
+    console.error('[Keycloak OIDC] error:', err);
+    res.redirect(`${FRONTEND_URL}/login?error=keycloak_failed`);
   }
 });
 

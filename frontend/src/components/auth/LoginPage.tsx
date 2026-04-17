@@ -16,6 +16,18 @@ function GoogleIcon() {
   );
 }
 
+function KeycloakIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="11" fill="#4D9DE0" />
+      <path
+        d="M7 8.5h4.5l1.5 3.5-1.5 3.5H7l1.5-3.5L7 8.5zm5.5 0H17l-1.5 3.5L17 15.5h-4.5L14 12l-1.5-3.5z"
+        fill="white"
+      />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,6 +37,8 @@ export default function LoginPage() {
   useEffect(() => {
     const error = searchParams.get('error');
     if (error === 'google_failed') toast.error('Error al iniciar sesión con Google');
+    if (error === 'keycloak_failed') toast.error('Error al iniciar sesión con SSO');
+    if (error === 'keycloak_not_configured') toast.error('SSO no está configurado en el servidor');
   }, []);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -39,6 +53,10 @@ export default function LoginPage() {
 
   const handleGoogleLogin = () => {
     window.location.href = '/api/auth/google';
+  };
+
+  const handleKeycloakLogin = () => {
+    window.location.href = '/api/auth/keycloak';
   };
 
   return (
@@ -109,6 +127,15 @@ export default function LoginPage() {
           >
             <GoogleIcon />
             Iniciar sesión con Google
+          </button>
+
+          <button
+            type="button"
+            onClick={handleKeycloakLogin}
+            className="mt-3 w-full flex items-center justify-center gap-3 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <KeycloakIcon />
+            Iniciar sesión con SSO (Keycloak)
           </button>
         </div>
 

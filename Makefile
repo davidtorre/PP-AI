@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs seed reset ps shell-backend shell-db
+.PHONY: help build up down restart logs seed reset ps shell-backend shell-db keycloak-up keycloak-setup
 
 # ─── PP-AI — Comandos locales (Docker Desktop) ───────────────────────────────
 
@@ -54,5 +54,49 @@ shell-db: ## Abrir psql dentro del contenedor de la BD
 reset: ## ⚠ Eliminar contenedores Y volúmenes (borra todos los datos)
 	@echo "⚠  Esto eliminará TODOS los datos (BD y uploads)."
 	@read -p "   Escribir 'si' para confirmar: " c; [ "$$c" = "si" ] || exit 1
-	docker compose down -v
+	docker compose --profile keycloak down -v
 	@echo "✅ Limpieza completa."
+
+keycloak-up: ## Levantar todos los servicios incluyendo Keycloak SSO
+	docker compose --profile keycloak up -d --build
+	@echo ""
+	@echo "  ✅ App disponible en       → http://localhost"
+	@echo "  🔐 Keycloak Admin UI       → http://localhost:8180"
+	@echo "  👤 Admin: $(shell grep KC_ADMIN_USER .env | cut -d= -f2) / $(shell grep KC_ADMIN_PASSWORD .env | cut -d= -f2)"
+	@echo ""
+	@echo "  Próximo paso: make keycloak-setup"
+	@echo ""
+
+keycloak-setup: ## Mostrar instrucciones para configurar el realm de Keycloak
+	@echo ""
+	@echo "  ╔══════════════════════════════════════════════════════════════════╗"
+	@echo "  ║              Configuración de Keycloak SSO                      ║"
+	@echo "  ╠══════════════════════════════════════════════════════════════════╣"
+	@echo "  ║                                                                  ║"
+	@echo "  ║  1. Abre Keycloak Admin:  http://localhost:8180                  ║"
+	@echo "  ║     Login: admin / admin_local_2024                              ║"
+	@echo "  ║                                                                  ║"
+	@echo "  ║  2. Crear Realm                                                  ║"
+	@echo "  ║     Realm name: ppai                                             ║"
+	@echo "  ║                                                                  ║"
+	@echo "  ║  3. Clients → Create client                                      ║"
+	@echo "  ║     Client type:           OpenID Connect                        ║"
+	@echo "  ║     Client ID:             ppai-app                              ║"
+	@echo "  ║     Client authentication: ON  (confidential)                   ║"
+	@echo "  ║     Valid redirect URIs:                                         ║"
+	@echo "  ║       http://localhost/api/auth/keycloak/callback                ║"
+	@echo "  ║     Web origins:  http://localhost                               ║"
+	@echo "  ║                                                                  ║"
+	@echo "  ║  4. Pestaña Credentials → copiar Client secret                   ║"
+	@echo "  ║                                                                  ║"
+	@echo "  ║  5. Editar .env                                                  ║"
+	@echo "  ║     KEYCLOAK_CLIENT_SECRET=<el secret copiado>                   ║"
+	@echo "  ║                                                                  ║"
+	@echo "  ║  6. Reiniciar backend                                            ║"
+	@echo "  ║     docker compose --profile keycloak up -d backend              ║"
+	@echo "  ║                                                                  ║"
+	@echo "  ║  7. Crear usuarios en Keycloak: Users → Add user                 ║"
+	@echo "  ║     O federar con LDAP/AD en: User Federation                    ║"
+	@echo "  ║                                                                  ║"
+	@echo "  ╚══════════════════════════════════════════════════════════════════╝"
+	@echo ""

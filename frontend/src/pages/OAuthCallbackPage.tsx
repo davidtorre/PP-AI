@@ -13,13 +13,13 @@ export default function OAuthCallbackPage() {
     const token = searchParams.get('token');
     const error = searchParams.get('error');
 
-    if (error === 'google_cancelled') {
+    if (error === 'google_cancelled' || error === 'keycloak_cancelled') {
       navigate('/login', { replace: true });
       return;
     }
 
     if (error || !token) {
-      toast.error('Error al iniciar sesión con Google');
+      toast.error('Error al completar el inicio de sesión');
       navigate('/login', { replace: true });
       return;
     }

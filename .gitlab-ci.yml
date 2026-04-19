@@ -1,0 +1,145 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PP-AI — GitLab CI/CD Pipeline
+#
+# Stages
+#   test   → typecheck + unit tests          (todos los branches y MRs)
+#   build  → docker build + push a Harbor    (solo main y tags)
+#
+# Variables requeridas en GitLab → Settings → CI/CD → Variables:
+#   HARBOR_URL, HARBOR_PROJECT, HARBOR_USER, HARBOR_PASSWORD
+#   (ver listado completo en README.md → sección "CI/CD Variables")
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - test
+  - build
+
+# ── Variables globales ────────────────────────────────────────────────────────
+variables:
+  # Docker-in-Docker
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_DRIVER: overlay2
+  # Nombres de imagen en Harbor (se sobreescriben con variables de GitLab)
+  BACKEND_IMAGE:  "${HARBOR_URL}/${HARBOR_PROJECT}/pp-ai-backend"
+  FRONTEND_IMAGE: "${HARBOR_URL}/${HARBOR_PROJECT}/pp-ai-frontend"
+
+# ── Reglas reutilizables ──────────────────────────────────────────────────────
+# Tests: corren en cualquier push o MR
+.rules_always:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# Build: solo en main o tags semánticos (vX.Y.Z)
+.rules_build:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
+
+# ── Template Docker ────────────────────────────────────────────────────────────
+.docker_job:
+  image: docker:26
+  services:
+    - name: docker:26-dind
+      alias: docker
+  before_script:
+    - echo "$HARBOR_PASSWORD" | docker login "$HARBOR_URL" -u "$HARBOR_USER" --password-stdin
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STAGE: test
+# ══════════════════════════════════════════════════════════════════════════════
+
+test:backend:
+  stage: test
+  extends: .rules_always
+  image: node:22-alpine
+  cache:
+    key: "backend-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - backend/node_modules/
+  script:
+    - cd backend
+    - npm ci
+    - echo "── TypeScript typecheck ──"
+    - npm run typecheck
+    - echo "── Unit tests ──"
+    - npm test
+
+test:frontend:
+  stage: test
+  extends: .rules_always
+  image: node:22-alpine
+  cache:
+    key: "frontend-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - frontend/node_modules/
+  script:
+    - cd frontend
+    - npm ci
+    - echo "── TypeScript typecheck ──"
+    - npm run typecheck
+    - echo "── Unit tests ──"
+    - npm test
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STAGE: build  (solo main / tags)
+# ══════════════════════════════════════════════════════════════════════════════
+
+build:backend:
+  stage: build
+  extends:
+    - .rules_build
+    - .docker_job
+  script:
+    - |
+      # ── Calcular tags ──────────────────────────────────────────────────────
+      TAGS="-t ${BACKEND_IMAGE}:${CI_COMMIT_SHA}"
+      TAGS="${TAGS} -t ${BACKEND_IMAGE}:${CI_COMMIT_REF_SLUG}"
+      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        TAGS="${TAGS} -t ${BACKEND_IMAGE}:latest"
+      fi
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        TAGS="${TAGS} -t ${BACKEND_IMAGE}:${CI_COMMIT_TAG} -t ${BACKEND_IMAGE}:latest"
+      fi
+
+      # ── Pull cache de imagen anterior (falla silenciosamente en primer run) ─
+      docker pull "${BACKEND_IMAGE}:latest" 2>/dev/null || true
+
+      # ── Build ──────────────────────────────────────────────────────────────
+      DOCKER_BUILDKIT=1 docker build \
+        --cache-from "${BACKEND_IMAGE}:latest" \
+        ${TAGS} \
+        ./backend
+
+      # ── Push todos los tags ────────────────────────────────────────────────
+      docker push --all-tags "${BACKEND_IMAGE}"
+
+build:frontend:
+  stage: build
+  extends:
+    - .rules_build
+    - .docker_job
+  script:
+    - |
+      # ── Calcular tags ──────────────────────────────────────────────────────
+      TAGS="-t ${FRONTEND_IMAGE}:${CI_COMMIT_SHA}"
+      TAGS="${TAGS} -t ${FRONTEND_IMAGE}:${CI_COMMIT_REF_SLUG}"
+      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        TAGS="${TAGS} -t ${FRONTEND_IMAGE}:latest"
+      fi
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        TAGS="${TAGS} -t ${FRONTEND_IMAGE}:${CI_COMMIT_TAG} -t ${FRONTEND_IMAGE}:latest"
+      fi
+
+      # ── Pull cache de imagen anterior ──────────────────────────────────────
+      docker pull "${FRONTEND_IMAGE}:latest" 2>/dev/null || true
+
+      # ── Build ──────────────────────────────────────────────────────────────
+      DOCKER_BUILDKIT=1 docker build \
+        --cache-from "${FRONTEND_IMAGE}:latest" \
+        ${TAGS} \
+        ./frontend
+
+      # ── Push todos los tags ────────────────────────────────────────────────
+      docker push --all-tags "${FRONTEND_IMAGE}"

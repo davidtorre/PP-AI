@@ -2,42 +2,92 @@
 # PP-AI — GitLab CI/CD Pipeline
 #
 # Stages
-#   test   → typecheck + unit tests          (todos los branches y MRs)
-#   build  → docker build + push a Harbor    (solo main y tags)
+#   test    → typecheck + unit tests        (todos los branches y MRs)
+#   build   → docker build + push a Harbor  (solo main y tags)
+#   deploy  → genera .env + reinicia server (manual, solo main y tags)
 #
-# Variables requeridas en GitLab → Settings → CI/CD → Variables:
-#   HARBOR_URL, HARBOR_PROJECT, HARBOR_USER, HARBOR_PASSWORD
-#   (ver listado completo en README.md → sección "CI/CD Variables")
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ VARIABLES requeridas en GitLab → Settings → CI/CD → Variables          │
+# │                                                                         │
+# │ ── Harbor ──────────────────────────────────────────────────────────── │
+# │  HARBOR_URL          Variable  no-mask   harbor.tigocloud.net           │
+# │  HARBOR_PROJECT      Variable  no-mask   ppai                           │
+# │  HARBOR_USER         Variable  no-mask   robot$ppai+ci                  │
+# │  HARBOR_PASSWORD     Variable  MASK+PROT <robot secret>                 │
+# │                                                                         │
+# │ ── Deploy SSH ──────────────────────────────────────────────────────── │
+# │  DEPLOY_HOST         Variable  no-mask   10.0.0.50 o prod.app.com       │
+# │  DEPLOY_USER         Variable  no-mask   ubuntu                         │
+# │  DEPLOY_PATH         Variable  no-mask   /opt/pp-ai                     │
+# │  DEPLOY_SSH_KEY      File      MASK+PROT <clave privada SSH>            │
+# │                                                                         │
+# │ ── Base de datos (producción) ──────────────────────────────────────── │
+# │  DB_NAME             Variable  no-mask   ppai                           │
+# │  DB_USER             Variable  no-mask   ppai                           │
+# │  DB_PASSWORD         Variable  MASK+PROT <password prod>                │
+# │                                                                         │
+# │ ── Autenticación ───────────────────────────────────────────────────── │
+# │  JWT_SECRET          Variable  MASK+PROT <string aleatorio largo>       │
+# │                                                                         │
+# │ ── App URLs (producción) ───────────────────────────────────────────── │
+# │  FRONTEND_URL        Variable  no-mask   https://ppai.tigocloud.net     │
+# │  FRONTEND_PORT       Variable  no-mask   80                             │
+# │                                                                         │
+# │ ── Email ───────────────────────────────────────────────────────────── │
+# │  ENABLE_EMAIL        Variable  no-mask   true                           │
+# │  SMTP_FROM           Variable  no-mask   PP-AI                          │
+# │  SMTP_HOST           Variable  no-mask   smtp.gmail.com                 │
+# │  SMTP_PORT           Variable  no-mask   587                            │
+# │  SMTP_SECURE         Variable  no-mask   false                          │
+# │  SMTP_USER           Variable  no-mask   humberto.bellizzi@gmail.com    │
+# │  SMTP_PASS           Variable  MASK      <app password gmail>           │
+# │                                                                         │
+# │ ── Google OAuth ────────────────────────────────────────────────────── │
+# │  GOOGLE_CLIENT_ID    Variable  no-mask   643571...apps.googleusercontent│
+# │  GOOGLE_CLIENT_SECRET Variable MASK      GOCSPX-...                    │
+# │  GOOGLE_CALLBACK_URL Variable  no-mask   https://.../api/auth/google/cb │
+# │                                                                         │
+# │ ── Keycloak SSO ────────────────────────────────────────────────────── │
+# │  KEYCLOAK_URL           Variable no-mask  http://keycloak:8080          │
+# │  KEYCLOAK_PUBLIC_URL    Variable no-mask  https://keycloak.tigocloud.net│
+# │  KEYCLOAK_REALM         Variable no-mask  ppai                          │
+# │  KEYCLOAK_CLIENT_ID     Variable no-mask  ppai-app                      │
+# │  KEYCLOAK_CLIENT_SECRET Variable MASK+PROT <client secret>              │
+# │  KEYCLOAK_CALLBACK_URL  Variable no-mask  https://.../keycloak/callback │
+# │                                                                         │
+# │ ── Keycloak Admin ──────────────────────────────────────────────────── │
+# │  KC_ADMIN_USER       Variable  no-mask   admin                          │
+# │  KC_ADMIN_PASSWORD   Variable  MASK      <admin password>               │
+# │  KC_DB_USER          Variable  no-mask   keycloak                       │
+# │  KC_DB_PASSWORD      Variable  MASK+PROT <keycloak db password>         │
+# └─────────────────────────────────────────────────────────────────────────┘
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
   - test
   - build
+  - deploy
 
 # ── Variables globales ────────────────────────────────────────────────────────
 variables:
-  # Docker-in-Docker
   DOCKER_TLS_CERTDIR: "/certs"
   DOCKER_DRIVER: overlay2
-  # Nombres de imagen en Harbor (se sobreescriben con variables de GitLab)
   BACKEND_IMAGE:  "${HARBOR_URL}/${HARBOR_PROJECT}/pp-ai-backend"
   FRONTEND_IMAGE: "${HARBOR_URL}/${HARBOR_PROJECT}/pp-ai-frontend"
 
 # ── Reglas reutilizables ──────────────────────────────────────────────────────
-# Tests: corren en cualquier push o MR
 .rules_always:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
 
-# Build: solo en main o tags semánticos (vX.Y.Z)
-.rules_build:
+.rules_main:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
-# ── Template Docker ────────────────────────────────────────────────────────────
+# ── Template Docker-in-Docker ─────────────────────────────────────────────────
 .docker_job:
   image: docker:26
   services:
@@ -56,14 +106,11 @@ test:backend:
   image: node:22-alpine
   cache:
     key: "backend-${CI_COMMIT_REF_SLUG}"
-    paths:
-      - backend/node_modules/
+    paths: [backend/node_modules/]
   script:
     - cd backend
     - npm ci
-    - echo "── TypeScript typecheck ──"
     - npm run typecheck
-    - echo "── Unit tests ──"
     - npm test
 
 test:frontend:
@@ -72,14 +119,11 @@ test:frontend:
   image: node:22-alpine
   cache:
     key: "frontend-${CI_COMMIT_REF_SLUG}"
-    paths:
-      - frontend/node_modules/
+    paths: [frontend/node_modules/]
   script:
     - cd frontend
     - npm ci
-    - echo "── TypeScript typecheck ──"
     - npm run typecheck
-    - echo "── Unit tests ──"
     - npm test
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -89,57 +133,125 @@ test:frontend:
 build:backend:
   stage: build
   extends:
-    - .rules_build
+    - .rules_main
     - .docker_job
   script:
     - |
-      # ── Calcular tags ──────────────────────────────────────────────────────
-      TAGS="-t ${BACKEND_IMAGE}:${CI_COMMIT_SHA}"
-      TAGS="${TAGS} -t ${BACKEND_IMAGE}:${CI_COMMIT_REF_SLUG}"
-      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
-        TAGS="${TAGS} -t ${BACKEND_IMAGE}:latest"
-      fi
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        TAGS="${TAGS} -t ${BACKEND_IMAGE}:${CI_COMMIT_TAG} -t ${BACKEND_IMAGE}:latest"
-      fi
-
-      # ── Pull cache de imagen anterior (falla silenciosamente en primer run) ─
+      TAGS="-t ${BACKEND_IMAGE}:${CI_COMMIT_SHA} -t ${BACKEND_IMAGE}:${CI_COMMIT_REF_SLUG}"
+      [ "$CI_COMMIT_BRANCH" = "main" ] && TAGS="${TAGS} -t ${BACKEND_IMAGE}:latest"
+      [ -n "$CI_COMMIT_TAG" ] && TAGS="${TAGS} -t ${BACKEND_IMAGE}:${CI_COMMIT_TAG} -t ${BACKEND_IMAGE}:latest"
       docker pull "${BACKEND_IMAGE}:latest" 2>/dev/null || true
-
-      # ── Build ──────────────────────────────────────────────────────────────
-      DOCKER_BUILDKIT=1 docker build \
-        --cache-from "${BACKEND_IMAGE}:latest" \
-        ${TAGS} \
-        ./backend
-
-      # ── Push todos los tags ────────────────────────────────────────────────
+      DOCKER_BUILDKIT=1 docker build --cache-from "${BACKEND_IMAGE}:latest" ${TAGS} ./backend
       docker push --all-tags "${BACKEND_IMAGE}"
 
 build:frontend:
   stage: build
   extends:
-    - .rules_build
+    - .rules_main
     - .docker_job
   script:
     - |
-      # ── Calcular tags ──────────────────────────────────────────────────────
-      TAGS="-t ${FRONTEND_IMAGE}:${CI_COMMIT_SHA}"
-      TAGS="${TAGS} -t ${FRONTEND_IMAGE}:${CI_COMMIT_REF_SLUG}"
-      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
-        TAGS="${TAGS} -t ${FRONTEND_IMAGE}:latest"
-      fi
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        TAGS="${TAGS} -t ${FRONTEND_IMAGE}:${CI_COMMIT_TAG} -t ${FRONTEND_IMAGE}:latest"
-      fi
-
-      # ── Pull cache de imagen anterior ──────────────────────────────────────
+      TAGS="-t ${FRONTEND_IMAGE}:${CI_COMMIT_SHA} -t ${FRONTEND_IMAGE}:${CI_COMMIT_REF_SLUG}"
+      [ "$CI_COMMIT_BRANCH" = "main" ] && TAGS="${TAGS} -t ${FRONTEND_IMAGE}:latest"
+      [ -n "$CI_COMMIT_TAG" ] && TAGS="${TAGS} -t ${FRONTEND_IMAGE}:${CI_COMMIT_TAG} -t ${FRONTEND_IMAGE}:latest"
       docker pull "${FRONTEND_IMAGE}:latest" 2>/dev/null || true
-
-      # ── Build ──────────────────────────────────────────────────────────────
-      DOCKER_BUILDKIT=1 docker build \
-        --cache-from "${FRONTEND_IMAGE}:latest" \
-        ${TAGS} \
-        ./frontend
-
-      # ── Push todos los tags ────────────────────────────────────────────────
+      DOCKER_BUILDKIT=1 docker build --cache-from "${FRONTEND_IMAGE}:latest" ${TAGS} ./frontend
       docker push --all-tags "${FRONTEND_IMAGE}"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STAGE: deploy  (manual — solo main / tags)
+#
+# Requisitos en el servidor:
+#   - Docker + Docker Compose v2 instalados
+#   - El usuario DEPLOY_USER tiene acceso a docker
+#   - El directorio DEPLOY_PATH contiene docker-compose.yml y docker-compose.prod.yml
+#   - El servidor puede hacer pull de HARBOR_URL
+# ══════════════════════════════════════════════════════════════════════════════
+
+deploy:production:
+  stage: deploy
+  extends: .rules_main
+  when: manual          # Se dispara manualmente desde la UI de GitLab
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    # DEPLOY_SSH_KEY debe ser de tipo "File" en GitLab → apunta a un fichero temp
+    - chmod 400 "$DEPLOY_SSH_KEY"
+    - ssh-add "$DEPLOY_SSH_KEY"
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+  script:
+    - |
+      # ── 1. Generar .env de producción con todas las variables de GitLab ──
+      cat > .env.deploy << ENV
+      # Generado por GitLab CI — commit ${CI_COMMIT_SHA}
+      # ── Base de datos ──────────────────────────────────────────────────
+      DB_NAME=${DB_NAME}
+      DB_USER=${DB_USER}
+      DB_PASSWORD=${DB_PASSWORD}
+
+      # ── JWT ────────────────────────────────────────────────────────────
+      JWT_SECRET=${JWT_SECRET}
+
+      # ── App URL ────────────────────────────────────────────────────────
+      FRONTEND_URL=${FRONTEND_URL}
+      FRONTEND_PORT=${FRONTEND_PORT}
+
+      # ── Email ──────────────────────────────────────────────────────────
+      ENABLE_EMAIL=${ENABLE_EMAIL}
+      SMTP_FROM=${SMTP_FROM}
+      SMTP_HOST=${SMTP_HOST}
+      SMTP_PORT=${SMTP_PORT}
+      SMTP_SECURE=${SMTP_SECURE}
+      SMTP_USER=${SMTP_USER}
+      SMTP_PASS=${SMTP_PASS}
+
+      # ── Google OAuth ───────────────────────────────────────────────────
+      GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
+
+      # ── Keycloak SSO ───────────────────────────────────────────────────
+      KEYCLOAK_URL=${KEYCLOAK_URL}
+      KEYCLOAK_PUBLIC_URL=${KEYCLOAK_PUBLIC_URL}
+      KEYCLOAK_REALM=${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_CALLBACK_URL=${KEYCLOAK_CALLBACK_URL}
+
+      # ── Keycloak Admin ─────────────────────────────────────────────────
+      KC_ADMIN_USER=${KC_ADMIN_USER}
+      KC_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}
+      KC_DB_USER=${KC_DB_USER}
+      KC_DB_PASSWORD=${KC_DB_PASSWORD}
+
+      # ── Harbor (para docker-compose.prod.yml) ──────────────────────────
+      HARBOR_URL=${HARBOR_URL}
+      HARBOR_PROJECT=${HARBOR_PROJECT}
+      IMAGE_TAG=${CI_COMMIT_SHA}
+      ENV
+
+      # ── 2. Copiar .env al servidor ───────────────────────────────────
+      scp .env.deploy ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/.env
+
+      # ── 3. Pull de imágenes nuevas y restart ─────────────────────────
+      ssh ${DEPLOY_USER}@${DEPLOY_HOST} "
+        set -e
+        cd ${DEPLOY_PATH}
+
+        echo '▶ Login en Harbor...'
+        echo '${HARBOR_PASSWORD}' | docker login '${HARBOR_URL}' -u '${HARBOR_USER}' --password-stdin
+
+        echo '▶ Pull de imágenes (tag: ${CI_COMMIT_SHA})...'
+        docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+
+        echo '▶ Reiniciando servicios...'
+        docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build --remove-orphans
+
+        echo '▶ Estado final:'
+        docker compose ps
+      "
+  environment:
+    name: production
+    url: $FRONTEND_URL

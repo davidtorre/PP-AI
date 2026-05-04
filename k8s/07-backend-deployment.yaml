@@ -40,9 +40,10 @@ spec:
 
       containers:
         - name: backend
-          # ── Cambiar el tag por la versión específica en producción ──
+          # ── Reemplazar con tu imagen ──────────────────────────────────
+          # Ejemplo: your-registry.example.com/your-project/pp-ai-backend:v1.0.0
           # Evitar :latest en producción para garantizar deploys reproducibles
-          image: humbertobellizzi/bellizzihub:ppai-backend-latest
+          image: REGISTRY_URL/REGISTRY_PROJECT/pp-ai-backend:latest
           imagePullPolicy: Always
           ports:
             - name: http

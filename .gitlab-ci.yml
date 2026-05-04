@@ -10,9 +10,9 @@
 # │ VARIABLES requeridas en GitLab → Settings → CI/CD → Variables          │
 # │                                                                         │
 # │ ── Harbor ──────────────────────────────────────────────────────────── │
-# │  HARBOR_URL          Variable  no-mask   harbor.tigocloud.net           │
-# │  HARBOR_PROJECT      Variable  no-mask   ppai                           │
-# │  HARBOR_USER         Variable  no-mask   robot$ppai+ci                  │
+# │  HARBOR_URL          Variable  no-mask   harbor.example.com             │
+# │  HARBOR_PROJECT      Variable  no-mask   pp-ai                          │
+# │  HARBOR_USER         Variable  no-mask   robot$pp-ai+ci                 │
 # │  HARBOR_PASSWORD     Variable  MASK+PROT <robot secret>                 │
 # │                                                                         │
 # │ ── Deploy SSH ──────────────────────────────────────────────────────── │
@@ -30,26 +30,26 @@
 # │  JWT_SECRET          Variable  MASK+PROT <string aleatorio largo>       │
 # │                                                                         │
 # │ ── App URLs (producción) ───────────────────────────────────────────── │
-# │  FRONTEND_URL        Variable  no-mask   https://ppai.tigocloud.net     │
+# │  FRONTEND_URL        Variable  no-mask   https://pp-ai.example.com      │
 # │  FRONTEND_PORT       Variable  no-mask   80                             │
 # │                                                                         │
 # │ ── Email ───────────────────────────────────────────────────────────── │
 # │  ENABLE_EMAIL        Variable  no-mask   true                           │
 # │  SMTP_FROM           Variable  no-mask   PP-AI                          │
-# │  SMTP_HOST           Variable  no-mask   smtp.gmail.com                 │
+# │  SMTP_HOST           Variable  no-mask   smtp.example.com               │
 # │  SMTP_PORT           Variable  no-mask   587                            │
 # │  SMTP_SECURE         Variable  no-mask   false                          │
-# │  SMTP_USER           Variable  no-mask   humberto.bellizzi@gmail.com    │
+# │  SMTP_USER           Variable  no-mask   noreply@example.com            │
 # │  SMTP_PASS           Variable  MASK      <app password gmail>           │
 # │                                                                         │
 # │ ── Google OAuth ────────────────────────────────────────────────────── │
-# │  GOOGLE_CLIENT_ID    Variable  no-mask   643571...apps.googleusercontent│
-# │  GOOGLE_CLIENT_SECRET Variable MASK      GOCSPX-...                    │
+# │  GOOGLE_CLIENT_ID    Variable  no-mask   <your-google-client-id>        │
+# │  GOOGLE_CLIENT_SECRET Variable MASK      <your-google-client-secret>   │
 # │  GOOGLE_CALLBACK_URL Variable  no-mask   https://.../api/auth/google/cb │
 # │                                                                         │
 # │ ── Keycloak SSO ────────────────────────────────────────────────────── │
 # │  KEYCLOAK_URL           Variable no-mask  http://keycloak:8080          │
-# │  KEYCLOAK_PUBLIC_URL    Variable no-mask  https://keycloak.tigocloud.net│
+# │  KEYCLOAK_PUBLIC_URL    Variable no-mask  https://keycloak.example.com  │
 # │  KEYCLOAK_REALM         Variable no-mask  ppai                          │
 # │  KEYCLOAK_CLIENT_ID     Variable no-mask  ppai-app                      │
 # │  KEYCLOAK_CLIENT_SECRET Variable MASK+PROT <client secret>              │

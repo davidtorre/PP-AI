@@ -39,7 +39,8 @@ spec:
               echo "✅ Postgres listo."
       containers:
         - name: seed
-          image: humbertobellizzi/bellizzihub:ppai-backend-latest
+          # Reemplazar con tu imagen: your-registry.example.com/your-project/pp-ai-backend:v1.0.0
+          image: REGISTRY_URL/REGISTRY_PROJECT/pp-ai-backend:latest
           imagePullPolicy: Always
           command: ["node", "dist/db/seed.js"]
           envFrom:

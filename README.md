@@ -38,7 +38,7 @@ make shell-db      # psql dentro de la base de datos
 |---|---|
 | Aplicación (frontend) | http://localhost:80 |
 | API backend (directo) | http://localhost:3003 |
-| PostgreSQL | localhost:5435 (user: `ppai`, pass: `ppai_local_2024`) |
+| PostgreSQL | localhost:5435 (user: `ppai`, password definida en `.env`) |
 
 ---
 
@@ -85,8 +85,8 @@ Internet
 
 | Componente | Imagen | Réplicas |
 |---|---|---|
-| Frontend | `humbertobellizzi/bellizzihub:ppai-frontend-latest` | 2 (HPA: 2–6) |
-| Backend | `humbertobellizzi/bellizzihub:ppai-backend-latest` | 1 |
+| Frontend | `REGISTRY_URL/REGISTRY_PROJECT/pp-ai-frontend:latest` | 2 (HPA: 2–6) |
+| Backend | `REGISTRY_URL/REGISTRY_PROJECT/pp-ai-backend:latest` | 1 |
 | Base de datos | `postgres:16-alpine` | 1 (StatefulSet) |
 
 > El backend se mantiene en 1 réplica porque el volumen de uploads es `ReadWriteOnce`.
@@ -500,8 +500,8 @@ kubectl rollout undo deployment/ppai-frontend -n ppai
 
 | Servicio | Imagen |
 |---|---|
-| Backend | `humbertobellizzi/bellizzihub:ppai-backend-latest` |
-| Frontend | `humbertobellizzi/bellizzihub:ppai-frontend-latest` |
+| Backend | `REGISTRY_URL/REGISTRY_PROJECT/pp-ai-backend:latest` |
+| Frontend | `REGISTRY_URL/REGISTRY_PROJECT/pp-ai-frontend:latest` |
 
 Las imágenes se construyen desde este repositorio con:
 
@@ -510,10 +510,10 @@ Las imágenes se construyen desde este repositorio con:
 docker compose build
 
 # Publicar en Docker Hub
-docker tag pp-ai-deploy-backend  humbertobellizzi/bellizzihub:ppai-backend-latest
-docker tag pp-ai-deploy-frontend humbertobellizzi/bellizzihub:ppai-frontend-latest
-docker push humbertobellizzi/bellizzihub:ppai-backend-latest
-docker push humbertobellizzi/bellizzihub:ppai-frontend-latest
+docker tag pp-ai-deploy-backend  REGISTRY_URL/REGISTRY_PROJECT/pp-ai-backend:latest
+docker tag pp-ai-deploy-frontend REGISTRY_URL/REGISTRY_PROJECT/pp-ai-frontend:latest
+docker push REGISTRY_URL/REGISTRY_PROJECT/pp-ai-backend:latest
+docker push REGISTRY_URL/REGISTRY_PROJECT/pp-ai-frontend:latest
 ```
 
 ---

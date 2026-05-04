@@ -26,7 +26,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: humbertobellizzi/bellizzihub:ppai-frontend-latest
+          # Reemplazar con tu imagen: your-registry.example.com/your-project/pp-ai-frontend:v1.0.0
+          image: REGISTRY_URL/REGISTRY_PROJECT/pp-ai-frontend:latest
           imagePullPolicy: Always
           ports:
             - name: http

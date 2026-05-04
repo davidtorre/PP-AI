@@ -74,7 +74,7 @@ keycloak-setup: ## Mostrar instrucciones para configurar el realm de Keycloak
 	@echo "  ╠══════════════════════════════════════════════════════════════════╣"
 	@echo "  ║                                                                  ║"
 	@echo "  ║  1. Abre Keycloak Admin:  http://localhost:8180                  ║"
-	@echo "  ║     Login: admin / admin_local_2024                              ║"
+	@echo "  ║     Login: KC_ADMIN_USER / KC_ADMIN_PASSWORD  (de tu .env)       ║"
 	@echo "  ║                                                                  ║"
 	@echo "  ║  2. Crear Realm                                                  ║"
 	@echo "  ║     Realm name: ppai                                             ║"

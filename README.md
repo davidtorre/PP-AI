@@ -5,14 +5,16 @@
 > Requisito: tener **Docker Desktop** instalado y corriendo.
 
 ```bash
-# 1. Levantar toda la aplicación (construye las imágenes la primera vez)
+# 1. Renombra el archivo .env.example a .env y modifica tus variables
+
+# 2. Levantar toda la aplicación (construye las imágenes la primera vez)
 make up
 
-# 2. Cargar usuarios de ejemplo
+# 3. Cargar usuarios de ejemplo
 make seed
 
-# 3. Abrir en el navegador
-open http://localhost
+# 4. Abrir en el navegador
+open http://localhost:8080
 ```
 
 | Cuenta | Contraseña | Rol |

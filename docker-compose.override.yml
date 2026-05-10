@@ -6,7 +6,7 @@
 #
 # NO usar en producción ni en Kubernetes.
 # ─────────────────────────────────────────────────────────────────────────────
-services:
+services: 
 
   database:
     # Expone Postgres en el puerto 5434 del host para conectarte con

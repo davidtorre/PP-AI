@@ -25,5 +25,3 @@ Thumbs.db
 # Local tooling — machine-specific, never commit
 .claude/
 marketing/
-CLAUDE.MD
-.gitignore
